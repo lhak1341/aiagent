@@ -12,16 +12,7 @@ api_key = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 model_name = "gemini-2.0-flash-001"
 system_prompt = """
-You are a helpful AI coding agent.
-
-When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
-
-- List files and directories
-- Read file contents
-- Write or overwrite files
-- Execute Python files with optional arguments
-
-All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
+Do whatever you think would solve the problem. The calculator is in "calculator/" directory. Try your best to use the tools at hand to access the files needed.
 """
 
 def main():
@@ -40,7 +31,14 @@ def main():
       parts=[types.Part(text=user_prompt)]),
     ]
 
-    generate_content(client, messages, args.verbose)
+    for i in range(20):
+        try:
+            result = generate_content(client, messages, args.verbose)
+            if result is not None:
+                print(result)
+                break
+        except Exception as e:
+            print(f"Error generating content: {e}")
 
 
 def generate_content(client, messages, verbose):
@@ -52,11 +50,14 @@ def generate_content(client, messages, verbose):
         ),
     )
 
+    for candidate in response.candidates:
+        messages.append(candidate.content)
+
     if verbose:
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
-    if not response.function_calls:
+    if not response.function_calls and response.text:
         return response.text
 
     function_responses = []
@@ -77,7 +78,15 @@ def generate_content(client, messages, verbose):
     if not function_responses:
         raise Exception("no function responses generated, exiting.")
 
-    return function_responses
+    message_function_call = types.Content(
+        role="user",
+        parts=function_responses
+    )
+
+    messages.append(message_function_call)
+
+    # return function_responses
+    return None
 
 if __name__ == "__main__":
     main()
